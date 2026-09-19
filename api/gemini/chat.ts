@@ -178,8 +178,8 @@ CURRENT LIVE BOARD CONTEXT:
   - Distinguish facts from recommendations. Recommendations must account for section, date, time window, line type, train movement, and department protection requirements.
   - You may explain a decision, but never grant authority to occupy a line, clear a train, or approve a block. Final authorization remains with the Section Controller and railway rules.
   - Keep answers concise and use short headings or bullets when they improve clarity.`;
-    const configuredModel = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
-    const models = [configuredModel, 'gemini-2.0-flash', 'gemini-2.5-flash-lite']
+    const configuredModel = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
+    const models = [configuredModel, 'gemini-2.0-flash', 'gemini-2.5-flash']
       .filter((model, index, all) => all.indexOf(model) === index);
     let lastFailure = 'Gemini did not return a response.';
 
