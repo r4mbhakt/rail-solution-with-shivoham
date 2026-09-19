@@ -55,21 +55,49 @@ const getRequisitions = (context: ChatContext): RequisitionSummary[] =>
     };
   });
 
-const buildContextSummary = (context: ChatContext): string => {
+const compactRecords = (records: unknown[], fields: string[], limit: number): string[] => records
+  .slice(0, limit)
+  .map((item) => {
+    const record = item && typeof item === 'object' ? item as Record<string, unknown> : {};
+    return JSON.stringify(Object.fromEntries(fields
+      .filter((field) => record[field] !== undefined && record[field] !== null && record[field] !== '')
+      .map((field) => [field, record[field]])));
+  });
+
+const buildContextSummary = (context: ChatContext, message: string): string => {
   const requisitions = getRequisitions(context);
   const defects = Array.isArray(context.defectsData) ? context.defectsData : [];
   const timetable = context.trainMasterSummary && typeof context.trainMasterSummary === 'object'
     ? context.trainMasterSummary as { trains?: unknown[]; sectionTimetable?: unknown[] }
     : {};
-  const trains = Array.isArray(timetable.trains) ? timetable.trains.length : 0;
-  const movements = Array.isArray(timetable.sectionTimetable) ? timetable.sectionTimetable.length : 0;
+  const trains = Array.isArray(timetable.trains) ? timetable.trains : [];
+  const movements = Array.isArray(timetable.sectionTimetable) ? timetable.sectionTimetable : [];
+  const query = message.toLowerCase();
+  const matchingSections = new Set(requisitions
+    .filter((request) => `${request.id} ${request.section}`.toLowerCase().split(/[^a-z0-9-]+/).some((token) => token.length > 2 && query.includes(token)))
+    .map((request) => request.section.toLowerCase()));
+  const relevantMovements = movements.filter((item) => {
+    const record = item && typeof item === 'object' ? item as Record<string, unknown> : {};
+    const searchable = `${record.section || ''} ${record.trainNumber || ''} ${record.trainName || ''}`.toLowerCase();
+    return matchingSections.size > 0
+      ? Array.from(matchingSections).some((section) => searchable.includes(section)) || searchable.split(/[^a-z0-9-]+/).some((token) => token.length > 2 && query.includes(token))
+      : searchable.split(/[^a-z0-9-]+/).some((token) => token.length > 2 && query.includes(token));
+  });
+  const relevantTrains = trains.filter((item) => {
+    const record = item && typeof item === 'object' ? item as Record<string, unknown> : {};
+    const searchable = `${record.trainNumber || ''} ${record.trainName || ''}`.toLowerCase();
+    return searchable.split(/[^a-z0-9-]+/).some((token) => token.length > 2 && query.includes(token));
+  });
   return [
     `Active requisitions (${requisitions.length}):`,
-    ...requisitions.slice(0, 40).map((request) =>
-      `ID: ${request.id} | Dept: ${request.department} | Section: ${request.section} | Status: ${request.status} | Date: ${request.date} | Window: ${request.startTime}-${request.endTime} | Duration: ${request.durationMinutes}m | Priority: ${request.priority} | ML Risk: ${request.mlRisk}`),
-    `Defect/risk records loaded: ${defects.length}`,
-    `Train master records: ${trains}; timetable movements: ${movements}`,
-  ].join('\n').slice(0, 12000);
+    ...compactRecords(requisitions, ['id', 'department', 'section', 'status', 'date', 'startTime', 'endTime', 'durationMinutes', 'stationFrom', 'stationTo', 'lineType', 'workCategory', 'speedRestrictionKmH', 'priority', 'urgencyLevel', 'passengerDelayMins', 'freightDelayMins', 'mlRisk'], 60),
+    `Defect/risk records loaded (${defects.length}):`,
+    ...compactRecords(defects, ['defectId', 'section', 'department', 'defectType', 'workCategory', 'workDescription', 'speedRestrictionKmH', 'priority', 'urgencyLevel', 'status'], 60),
+    `Train master records available: ${trains.length}; matching records for this question:`,
+    ...compactRecords(relevantTrains.length > 0 ? relevantTrains : trains, ['trainNumber', 'trainName', 'type', 'source', 'destination', 'priorityClass', 'daysOfRun', 'punctualityPct', 'averagePassengers'], 40),
+    `Timetable movements available: ${movements.length}; matching movements for this question:`,
+    ...compactRecords(relevantMovements.length > 0 ? relevantMovements : movements, ['trainNumber', 'section', 'arrivalTime', 'departureTime', 'direction', 'days'], 80),
+  ].join('\n').slice(0, 30000);
 };
 
 const localCopilotReply = (message: string, context: ChatContext): string => {
@@ -135,15 +163,21 @@ export default async function handler(request: IncomingMessage, response: Server
     const systemInstruction = `You are the Gemini Co-Pilot for TRIKAAL-RAKSHA-BLOCK, an Indian Railways Section Controller Assistant.
 
 CURRENT LIVE BOARD CONTEXT:
-${buildContextSummary(context)}
+  ${buildContextSummary(context, message)}
 
-Answer concisely and authoritatively. Use the live data above. Explain trade-offs and safety checks, but never grant authority to occupy a line or approve a block.`;
+  Rules for accurate answers:
+  - Treat the live board context as the source of truth for this conversation.
+  - Answer the exact question first, then give the relevant evidence and safety checks.
+  - Never invent a train, time, risk score, defect, capacity value, or approval status. If the context does not contain it, say that it is unavailable and state what must be checked.
+  - Distinguish facts from recommendations. Recommendations must account for section, date, time window, line type, train movement, and department protection requirements.
+  - You may explain a decision, but never grant authority to occupy a line, clear a train, or approve a block. Final authorization remains with the Section Controller and railway rules.
+  - Keep answers concise and use short headings or bullets when they improve clarity.`;
     const configuredModel = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
-    const models = [configuredModel, 'gemini-1.5-flash'].filter((model, index, all) => all.indexOf(model) === index);
+    const models = [configuredModel, 'gemini-2.5-flash-lite'].filter((model, index, all) => all.indexOf(model) === index);
 
     for (const model of models) {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 4000);
+      const timeoutId = setTimeout(() => controller.abort(), 12000);
       try {
         const geminiResponse = await fetch(
           `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`,

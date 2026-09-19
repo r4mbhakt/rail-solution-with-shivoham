@@ -109,6 +109,8 @@ The services are available at `http://localhost:8000`, `http://localhost:8001`, 
 
 The ML API loads the optional `models/defect_priority_lgb.pkl` artifact when present and otherwise serves its deterministic fallback. Local ML and FastAPI development dependencies are listed in `requirements.local.txt`. Vercel uses the minimal root `requirements.txt`, which contains only OR-Tools for the CP-SAT serverless function. The Gemini Co-Pilot chat uses the server-side `GEMINI_API_KEY` and optional `GEMINI_MODEL` environment variables. `VITE_GEMINI_API_KEY` is accepted temporarily for existing deployments, but should be migrated to `GEMINI_API_KEY` because `VITE_` values are intended for browser exposure.
 
+To enable model-generated Co-Pilot answers in Vercel, open the project settings at **Settings > Environment Variables**, add `GEMINI_API_KEY` with a Gemini API key from Google AI Studio, select the Production environment, and redeploy. Do not put this key in frontend code or commit it to the repository. Without this variable, the app uses its deterministic local fallback and clearly labels the answer as degraded in the API response.
+
 ## Environment Variables
 
 Copy `.env.example` to `.env` and fill in your own values before deploying. Supabase credentials are required at runtime. The ML risk scoring API uses port `8001`, while the CP-SAT solver uses port `8000`.

@@ -44,13 +44,26 @@ export const GeminiChatPanel: React.FC<GeminiChatPanelProps> = ({ currentUser, a
           startTime: request.requestedStartTime,
           endTime: request.requestedEndTime,
           durationMinutes: request.durationMinutes,
+          stationFrom: request.stationFrom,
+          stationTo: request.stationTo,
+          lineType: request.lineType,
+          workCategory: request.workCategory,
+          speedRestrictionKmH: request.speedRestrictionKmH,
           priority: request.priority,
+          urgencyLevel: request.urgencyLevel,
+          passengerDelayMins: request.passengerDelayMins,
+          freightDelayMins: request.freightDelayMins,
         }));
       const defectsData = allRequests.map((request) => ({
-        defectId: request.id,
+        defectId: request.defectId || request.id,
         section: request.section,
         department: request.department,
+        defectType: request.defectType,
+        workCategory: request.workCategory,
+        workDescription: request.workDescription,
+        speedRestrictionKmH: request.speedRestrictionKmH,
         priority: request.priority,
+        urgencyLevel: request.urgencyLevel,
         status: request.status,
       }));
       const trainMasterSummary = {

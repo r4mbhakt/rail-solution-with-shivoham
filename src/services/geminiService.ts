@@ -15,7 +15,7 @@ export async function chatWithAssistant(
   context: GeminiChatContext,
 ): Promise<string> {
   const controller = new AbortController();
-  const timeoutId = window.setTimeout(() => controller.abort(), 15000);
+  const timeoutId = window.setTimeout(() => controller.abort(), 20000);
   try {
     const response = await fetch('/api/gemini/chat', {
       method: 'POST',
@@ -31,7 +31,7 @@ export async function chatWithAssistant(
     return payload.reply;
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') {
-      throw new Error('Gemini timed out after 15 seconds. Check the server key and deployment logs.');
+      throw new Error('Gemini timed out after 20 seconds. Check the server key and deployment logs.');
     }
     throw error;
   } finally {
