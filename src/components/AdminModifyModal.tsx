@@ -98,10 +98,10 @@ export const AdminModifyModal: React.FC<AdminModifyModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 overflow-y-auto">
-      <div className="bg-white rounded-lg border border-slate-300 shadow-2xl max-w-xl w-full overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+    <div className="fixed inset-0 z-[60] flex items-start sm:items-center justify-center bg-slate-900/60 backdrop-blur-xs p-2 sm:p-4 overflow-y-auto">
+      <div className="bg-white rounded-lg border border-slate-300 shadow-2xl max-w-xl w-full max-h-[calc(100dvh-1rem)] sm:max-h-[calc(100dvh-2rem)] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
         {/* Header */}
-        <div className="bg-amber-600 text-white px-6 py-4 flex items-center justify-between border-b-2 border-amber-700">
+        <div className="bg-amber-600 text-white px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between border-b-2 border-amber-700 shrink-0">
           <div className="flex items-center space-x-3">
             <div className="w-9 h-9 rounded bg-white/10 flex items-center justify-center border border-white/20">
               <SlidersHorizontal className="w-5 h-5 text-white" />
@@ -122,7 +122,7 @@ export const AdminModifyModal: React.FC<AdminModifyModalProps> = ({
         </div>
 
         {/* Form Body */}
-        <form onSubmit={handleApply} className="p-6 space-y-4 text-xs text-slate-700">
+        <form onSubmit={handleApply} className="min-h-0 overflow-y-auto p-4 sm:p-6 space-y-4 text-xs text-slate-700">
           {/* Target Request Info */}
           <div className="p-3 bg-amber-50/60 border border-amber-200 rounded-lg space-y-1">
             <div className="flex items-center justify-between">

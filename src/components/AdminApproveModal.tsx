@@ -60,10 +60,10 @@ export const AdminApproveModal: React.FC<AdminApproveModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 overflow-y-auto">
-      <div className="bg-white rounded-lg border border-slate-300 shadow-2xl max-w-xl w-full overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+    <div className="fixed inset-0 z-[60] flex items-start sm:items-center justify-center bg-slate-900/60 backdrop-blur-xs p-2 sm:p-4 overflow-y-auto">
+      <div className="bg-white rounded-lg border border-slate-300 shadow-2xl max-w-xl w-full max-h-[calc(100dvh-1rem)] sm:max-h-[calc(100dvh-2rem)] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
         {/* Header */}
-        <div className="bg-[#000075] text-white px-6 py-4 flex items-center justify-between border-b-2 border-emerald-500">
+        <div className="bg-[#000075] text-white px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between border-b-2 border-emerald-500 shrink-0">
           <div className="flex items-center space-x-3">
             <div className="w-9 h-9 rounded bg-white/10 flex items-center justify-center border border-white/20">
               <CheckCircle2 className="w-5 h-5 text-emerald-400" />
@@ -84,7 +84,7 @@ export const AdminApproveModal: React.FC<AdminApproveModalProps> = ({
         </div>
 
         {/* Mode Selector Tabs */}
-        <div className="flex border-b border-slate-200 bg-slate-50 px-6 pt-2">
+        <div className="flex shrink-0 border-b border-slate-200 bg-slate-50 px-2 sm:px-6 pt-2 overflow-x-auto">
           <button
             type="button"
             onClick={() => setActiveTab('COPILOT')}
@@ -113,7 +113,7 @@ export const AdminApproveModal: React.FC<AdminApproveModalProps> = ({
 
         {/* Content Body */}
         {activeTab === 'COPILOT' ? (
-          <div className="p-6 overflow-y-auto space-y-4 max-h-[75vh]">
+          <div className="min-h-0 flex-1 p-4 sm:p-6 overflow-y-auto space-y-4">
             <AiCoPilotRecommendationEngine
               request={request}
               allRequests={allRequests}
@@ -142,7 +142,7 @@ export const AdminApproveModal: React.FC<AdminApproveModalProps> = ({
             </div>
           </div>
         ) : (
-          <form onSubmit={handleApprove} className="p-6 space-y-4 text-xs text-slate-700 max-h-[75vh] overflow-y-auto">
+          <form onSubmit={handleApprove} className="min-h-0 flex-1 p-4 sm:p-6 space-y-4 text-xs text-slate-700 overflow-y-auto">
             {/* Summary Requisition Banner */}
             <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-lg space-y-2">
               <div className="flex items-center justify-between">
