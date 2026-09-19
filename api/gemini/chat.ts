@@ -149,10 +149,16 @@ export default async function handler(request: IncomingMessage, response: Server
       return;
     }
 
-    const apiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
+    const apiKey = (process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY || '')
+      .trim()
+      .replace(/^['"]|['"]$/g, '');
     if (!apiKey) {
       console.error('[Gemini API Error]: GEMINI_API_KEY is not configured');
-      sendJson(response, 200, { reply: localCopilotReply(message, context), degraded: true });
+      sendJson(response, 200, {
+        reply: localCopilotReply(message, context),
+        degraded: true,
+        degradedReason: 'GEMINI_API_KEY is not configured in the server environment.',
+      });
       return;
     }
 
@@ -173,7 +179,9 @@ CURRENT LIVE BOARD CONTEXT:
   - You may explain a decision, but never grant authority to occupy a line, clear a train, or approve a block. Final authorization remains with the Section Controller and railway rules.
   - Keep answers concise and use short headings or bullets when they improve clarity.`;
     const configuredModel = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
-    const models = [configuredModel, 'gemini-2.5-flash-lite'].filter((model, index, all) => all.indexOf(model) === index);
+    const models = [configuredModel, 'gemini-2.0-flash', 'gemini-2.5-flash-lite']
+      .filter((model, index, all) => all.indexOf(model) === index);
+    let lastFailure = 'Gemini did not return a response.';
 
     for (const model of models) {
       const controller = new AbortController();
@@ -193,7 +201,9 @@ CURRENT LIVE BOARD CONTEXT:
           },
         );
         if (!geminiResponse.ok) {
-          console.error('[Gemini API Error]:', { model, status: geminiResponse.status, detail: await geminiResponse.text() });
+          const detail = await geminiResponse.text();
+          lastFailure = `${model} returned HTTP ${geminiResponse.status}`;
+          console.error('[Gemini API Error]:', { model, status: geminiResponse.status, detail });
           continue;
         }
         const result = await geminiResponse.json() as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
@@ -202,14 +212,20 @@ CURRENT LIVE BOARD CONTEXT:
           sendJson(response, 200, { reply, model });
           return;
         }
+        lastFailure = `${model} returned an empty response.`;
       } catch (error) {
+        lastFailure = `${model} request failed or timed out.`;
         console.error('[Gemini API Error]:', { model, error });
       } finally {
         clearTimeout(timeoutId);
       }
     }
 
-    sendJson(response, 200, { reply: localCopilotReply(message, context), degraded: true });
+    sendJson(response, 200, {
+      reply: localCopilotReply(message, context),
+      degraded: true,
+      degradedReason: lastFailure,
+    });
   } catch (error) {
     console.error('[Gemini API Error]:', error);
     sendJson(response, 200, {
