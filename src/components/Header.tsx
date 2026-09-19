@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import {
   ShieldCheck,
   LogOut,
-  Train,
   Clock,
   UserCircle2,
   Layers,
@@ -137,15 +136,13 @@ export const Header: React.FC<HeaderProps> = ({
       <div className="max-w-[1800px] w-full mx-auto px-3 sm:px-6 py-2.5 sm:py-3 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 sm:gap-3">
         {/* Logo & Emblem Brand Area */}
         <div className="flex items-center space-x-2.5 sm:space-x-3.5 min-w-0 max-w-full">
-          {/* Authentic Indian Railways Emblem Inspired Crest with Ashoka Wheel & Train Motif */}
-          <div className="relative flex-shrink-0 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-gradient-to-b from-white to-amber-50 flex items-center justify-center shadow-md border-2 border-amber-400 ring-2 ring-blue-900/40">
-            <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full border border-blue-900 flex flex-col items-center justify-center bg-slate-50 text-center p-0.5">
-              <Train className="w-4 h-4 sm:w-5 sm:h-5 text-[#000075]" />
-              <span className="text-[6px] sm:text-[7px] font-black text-amber-600 leading-none tracking-tighter">IR</span>
-            </div>
-            <div className="absolute -bottom-1 -right-1 w-3.5 h-3.5 sm:w-4 sm:h-4 rounded-full bg-amber-500 text-blue-950 flex items-center justify-center text-[6px] sm:text-[7px] font-extrabold shadow ring-1 ring-white">
-              ⚙️
-            </div>
+          {/* Official logo displayed only inside a white circular mark. */}
+          <div className="relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-amber-400 bg-white shadow-md ring-2 ring-blue-900/40 sm:h-12 sm:w-12">
+            <img
+              src="/logo.jpg"
+              alt="RAKSHA-BLOCK Logo"
+              className="h-full w-full rounded-full bg-white object-contain"
+            />
           </div>
 
           <div className="min-w-0">
