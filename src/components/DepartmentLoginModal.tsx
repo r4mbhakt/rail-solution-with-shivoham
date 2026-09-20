@@ -153,7 +153,7 @@ export const DepartmentLoginModal: React.FC<DepartmentLoginModalProps> = ({
                 setPassword(currentRoleInfo.pass);
                 setErrorMessage(null);
               }}
-              className="rounded border border-current/30 bg-white/70 px-2 py-1 text-[10px] font-bold uppercase tracking-wider hover:bg-white transition-colors cursor-pointer"
+              className="shrink-0 rounded border border-amber-500 bg-amber-100 px-2 py-1 text-[10px] font-black uppercase tracking-wider text-amber-950 shadow-sm ring-1 ring-amber-300 hover:bg-amber-200 transition-colors cursor-pointer"
               title={`Auto fill demo credentials for ${currentRoleInfo.label}`}
             >
               Auto Fill

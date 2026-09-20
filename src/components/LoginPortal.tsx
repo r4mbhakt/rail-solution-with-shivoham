@@ -289,16 +289,16 @@ export const LoginPortal: React.FC<LoginPortalProps> = ({
               className={`h-full bg-white rounded-xl border ${item.colorClasses.cardBorder} shadow-sm ${item.colorClasses.hoverGlow} hover:shadow-lg transition-all duration-200 flex flex-col overflow-hidden relative group cursor-pointer`}
             >
               {/* Card Official Department Header Ribbon */}
-              <div className={`min-h-[78px] px-5 py-3.5 ${item.colorClasses.headerBg} flex items-center justify-between border-b`}>
-                <div className="flex items-center space-x-3">
+              <div className={`min-h-[78px] px-4 sm:px-5 py-3.5 ${item.colorClasses.headerBg} flex items-center justify-between border-b`}>
+                <div className="flex min-w-0 items-center space-x-3">
                   <div className="w-10 h-10 rounded-lg bg-white flex items-center justify-center flex-shrink-0 shadow-sm border border-slate-200">
                     {item.icon}
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <div className="text-[10px] font-bold text-amber-300 tracking-wider">
                       {item.hindiTitle}
                     </div>
-                    <h3 className="text-base font-extrabold text-white tracking-tight leading-snug">
+                    <h3 className="text-sm sm:text-base font-extrabold text-white tracking-tight leading-snug break-words">
                       {item.title}
                     </h3>
                   </div>
@@ -315,7 +315,7 @@ export const LoginPortal: React.FC<LoginPortalProps> = ({
                       <div className="font-extrabold text-slate-900 text-sm">{item.user.name}</div>
                       <div className="text-slate-600 text-xs mt-0.5">{item.designationFull}</div>
                     </div>
-                    <div className="text-right text-[10px] text-slate-500">
+                    <div className="max-w-[35%] text-right text-[10px] text-slate-500 break-words">
                       {item.serviceId}
                     </div>
                   </div>

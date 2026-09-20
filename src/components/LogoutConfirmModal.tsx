@@ -47,7 +47,7 @@ export const LogoutConfirmModal: React.FC<LogoutConfirmModalProps> = ({
         <div className="p-6">
           <div className="flex items-center justify-center text-center">
             <h4 className="font-bold text-[15px] text-slate-900">
-              Are u sure u want to logout?
+              ARE YOU SURE YOU WANT TO LOGOUT ?
             </h4>
           </div>
         </div>
