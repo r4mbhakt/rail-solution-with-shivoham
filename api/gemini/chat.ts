@@ -5,6 +5,7 @@ type ChatContext = {
   activeRequisitions?: unknown[];
   defectsData?: unknown[];
   trainMasterSummary?: unknown;
+  corridorCapacity?: unknown[];
 };
 type RequisitionSummary = {
   id: string;
@@ -66,6 +67,9 @@ const compactRecords = (records: unknown[], fields: string[], limit: number): st
 
 const buildContextSummary = (context: ChatContext, message: string): string => {
   const requisitions = getRequisitions(context);
+  // getRequisitions() keeps only a few fields; the model needs the full set (line type, work category, delays...).
+  const rawRequisitions = Array.isArray(context.activeRequisitions) ? context.activeRequisitions : [];
+  const corridors = Array.isArray(context.corridorCapacity) ? context.corridorCapacity : [];
   const defects = Array.isArray(context.defectsData) ? context.defectsData : [];
   const timetable = context.trainMasterSummary && typeof context.trainMasterSummary === 'object'
     ? context.trainMasterSummary as { trains?: unknown[]; sectionTimetable?: unknown[] }
@@ -90,14 +94,16 @@ const buildContextSummary = (context: ChatContext, message: string): string => {
   });
   return [
     `Active requisitions (${requisitions.length}):`,
-    ...compactRecords(requisitions, ['id', 'department', 'section', 'status', 'date', 'startTime', 'endTime', 'durationMinutes', 'stationFrom', 'stationTo', 'lineType', 'workCategory', 'speedRestrictionKmH', 'priority', 'urgencyLevel', 'passengerDelayMins', 'freightDelayMins', 'mlRisk'], 60),
+    ...compactRecords(rawRequisitions, ['id', 'department', 'section', 'status', 'date', 'startTime', 'endTime', 'durationMinutes', 'stationFrom', 'stationTo', 'lineType', 'workCategory', 'speedRestrictionKmH', 'priority', 'priorityScore', 'urgencyLevel', 'passengerDelayMins', 'freightDelayMins', 'mlRisk'], 60),
     `Defect/risk records loaded (${defects.length}):`,
     ...compactRecords(defects, ['defectId', 'section', 'department', 'defectType', 'workCategory', 'workDescription', 'speedRestrictionKmH', 'priority', 'urgencyLevel', 'status'], 60),
+    `Corridor capacity records (${corridors.length}):`,
+    ...compactRecords(corridors, ['section', 'sectionName', 'zoneCode', 'divisionName', 'totalTracks', 'lineType', 'dailyTrainCount', 'capacityHoursUsed', 'maxCapacityHours', 'criticalityTier'], 40),
     `Train master records available: ${trains.length}; matching records for this question:`,
     ...compactRecords(relevantTrains.length > 0 ? relevantTrains : trains, ['trainNumber', 'trainName', 'type', 'source', 'destination', 'priorityClass', 'daysOfRun', 'punctualityPct', 'averagePassengers'], 40),
     `Timetable movements available: ${movements.length}; matching movements for this question:`,
     ...compactRecords(relevantMovements.length > 0 ? relevantMovements : movements, ['trainNumber', 'section', 'arrivalTime', 'departureTime', 'direction', 'days'], 80),
-  ].join('\n').slice(0, 30000);
+  ].join('\n').slice(0, 45000);
 };
 
 const localCopilotReply = (message: string, context: ChatContext): string => {
@@ -127,12 +133,137 @@ const localCopilotReply = (message: string, context: ChatContext): string => {
   return `Live board summary: ${requisitions.length} active requisitions are loaded. I can explain section status, train risk, timetable impact, conflict handling, or P-Way/S&T/TRD bundling. No block authority is granted by this assistant.`;
 };
 
+// ---------------------------------------------------------------------------
+// Gemini call layer
+// ---------------------------------------------------------------------------
+const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta';
+
+// Google retires model IDs regularly (gemini-1.5-* and gemini-2.0-flash are already shut down;
+// gemini-2.5-flash is scheduled for Oct 2026). Set GEMINI_MODEL in Vercel to override the first choice.
+const MODEL_CANDIDATES = ['gemini-3.5-flash', 'gemini-flash-latest', 'gemini-3.1-flash-lite', 'gemini-2.5-flash'];
+
+const cleanKey = (value?: string): string => (value || '').trim().replace(/^['"]|['"]$/g, '');
+const getApiKey = (): string => cleanKey(process.env.GEMINI_API_KEY) || cleanKey(process.env.VITE_GEMINI_API_KEY);
+const getModels = (): string[] => [cleanKey(process.env.GEMINI_MODEL), ...MODEL_CANDIDATES]
+  .filter((model, index, all) => model && all.indexOf(model) === index);
+
+const buildGenerationConfig = (model: string, withThinking: boolean): Record<string, unknown> => {
+  // maxOutputTokens also counts hidden "thinking" tokens, so keep plenty of headroom.
+  const config: Record<string, unknown> = { maxOutputTokens: 2048 };
+  if (!withThinking) return config;
+  if (model.startsWith('gemini-3')) config.thinkingConfig = { thinkingLevel: 'low' }; // Gemini 3.x: keep default temperature
+  else if (model.startsWith('gemini-2.5')) { config.temperature = 0.3; config.thinkingConfig = { thinkingBudget: 512 }; }
+  return config;
+};
+
+type GeminiContent = { role: 'user' | 'model'; parts: Array<{ text: string }> };
+type AttemptResult = { ok: boolean; reply?: string; status?: number; detail?: string; fatal?: boolean };
+
+// Gemini needs turns that start with "user" and alternate. The browser also sends the greeting bubble and the
+// current message inside `history`, so normalise it here.
+const buildContents = (history: ChatMessage[] | undefined, message: string): GeminiContent[] => {
+  const turns = (Array.isArray(history) ? history : [])
+    .filter((item) => item && typeof item.text === 'string' && item.text.trim())
+    .map((item) => ({ role: item.role === 'assistant' ? ('model' as const) : ('user' as const), text: String(item.text).slice(0, 4000) }))
+    .slice(-10);
+  const lastTurn = turns[turns.length - 1];
+  if (lastTurn && lastTurn.role === 'user' && lastTurn.text.trim() === message) turns.pop();
+  while (turns.length > 0 && turns[0].role !== 'user') turns.shift();
+  const merged: Array<{ role: 'user' | 'model'; text: string }> = [];
+  for (const turn of turns) {
+    const previous = merged[merged.length - 1];
+    if (previous && previous.role === turn.role) previous.text += `\n${turn.text}`;
+    else merged.push({ ...turn });
+  }
+  const previous = merged[merged.length - 1];
+  if (previous && previous.role === 'user') previous.text += `\n${message}`;
+  else merged.push({ role: 'user', text: message });
+  return merged.map((turn) => ({ role: turn.role, parts: [{ text: turn.text }] }));
+};
+
+const callGemini = async (
+  apiKey: string,
+  model: string,
+  systemInstruction: string,
+  contents: GeminiContent[],
+  withThinking: boolean,
+  timeoutMs: number,
+): Promise<AttemptResult> => {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const geminiResponse = await fetch(`${GEMINI_BASE}/models/${encodeURIComponent(model)}:generateContent`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
+      signal: controller.signal,
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: systemInstruction }] },
+        contents,
+        generationConfig: buildGenerationConfig(model, withThinking),
+      }),
+    });
+    if (!geminiResponse.ok) {
+      const detail = (await geminiResponse.text()).slice(0, 600);
+      const keyProblem = geminiResponse.status === 401 || geminiResponse.status === 403
+        || (geminiResponse.status === 400 && /API_KEY_INVALID|API key not valid|API key expired/i.test(detail));
+      return { ok: false, status: geminiResponse.status, detail, fatal: keyProblem };
+    }
+    const result = await geminiResponse.json() as {
+      candidates?: Array<{ finishReason?: string; content?: { parts?: Array<{ text?: string; thought?: boolean }> } }>;
+      promptFeedback?: { blockReason?: string };
+    };
+    const reply = result.candidates?.[0]?.content?.parts?.filter((part) => !part.thought).map((part) => part.text || '').join('').trim();
+    if (reply) return { ok: true, reply };
+    const reason = result.promptFeedback?.blockReason || result.candidates?.[0]?.finishReason || 'no text returned';
+    return { ok: false, status: 200, detail: `Empty response (${reason}).`, fatal: false };
+  } catch (error) {
+    const aborted = error instanceof Error && error.name === 'AbortError';
+    return { ok: false, status: 0, detail: aborted ? `Timed out after ${timeoutMs}ms.` : `Network error: ${String(error)}`, fatal: false };
+  } finally {
+    clearTimeout(timeoutId);
+  }
+};
+
+// GET /api/gemini/chat  ->  safe health check (never returns the key itself)
+const healthCheck = async (response: ServerResponse): Promise<void> => {
+  const apiKey = getApiKey();
+  const models = getModels();
+  if (!apiKey) {
+    sendJson(response, 200, { keyConfigured: false, hint: 'Add GEMINI_API_KEY in Vercel > Settings > Environment Variables, then redeploy.' });
+    return;
+  }
+  const base = { keyConfigured: true, keyPrefix: apiKey.slice(0, 3), keyLength: apiKey.length, modelsTried: models };
+  try {
+    const listResponse = await fetch(`${GEMINI_BASE}/models?pageSize=1000`, { headers: { 'x-goog-api-key': apiKey } });
+    if (!listResponse.ok) {
+      sendJson(response, 200, { ...base, keyValid: false, status: listResponse.status, detail: (await listResponse.text()).slice(0, 400) });
+      return;
+    }
+    const list = await listResponse.json() as { models?: Array<{ name?: string }> };
+    const available = new Set((list.models || []).map((item) => String(item.name || '').replace(/^models\//, '')));
+    const usable = models.filter((model) => available.has(model));
+    sendJson(response, 200, {
+      ...base,
+      keyValid: true,
+      modelsAvailableToThisKey: usable,
+      willUse: usable[0] || null,
+      warning: usable.length === 0 ? 'None of the configured models are available. Set GEMINI_MODEL to a current model ID.' : undefined,
+    });
+  } catch (error) {
+    sendJson(response, 200, { ...base, keyValid: false, detail: `Could not reach Google: ${String(error)}` });
+  }
+};
+
 export default async function handler(request: IncomingMessage, response: ServerResponse): Promise<void> {
   if (request.method === 'OPTIONS') {
     response.statusCode = 204;
     response.setHeader('Access-Control-Allow-Origin', '*');
     response.setHeader('Access-Control-Allow-Headers', 'Content-Type');
     response.end();
+    return;
+  }
+  if (request.method === 'GET') {
+    await healthCheck(response);
     return;
   }
   if (request.method !== 'POST') {
@@ -149,89 +280,51 @@ export default async function handler(request: IncomingMessage, response: Server
       return;
     }
 
-    const credentials = [
-      ['GEMINI_API_KEY', process.env.GEMINI_API_KEY],
-      ['VITE_GEMINI_API_KEY', process.env.VITE_GEMINI_API_KEY],
-    ]
-      .map(([name, value]) => [name, (value || '').trim().replace(/^['"]|['"]$/g, '')] as const)
-      .filter(([, value], index, entries) => value && entries.findIndex(([, candidate]) => candidate === value) === index);
-
-    if (credentials.length === 0) {
+    const apiKey = getApiKey();
+    if (!apiKey) {
       console.error('[Gemini API Error]: GEMINI_API_KEY is not configured in process.env');
       sendJson(response, 200, {
         reply: localCopilotReply(message, context),
         degraded: true,
-        degradedReason: 'GEMINI_API_KEY is not configured in the server environment.',
+        degradedReason: 'GEMINI_API_KEY is not set for this deployment. Add it in Vercel and redeploy.',
       });
       return;
     }
 
-    const history = (body.history || []).slice(-10).map((item) => ({
-      role: item.role === 'assistant' ? ('model' as const) : ('user' as const),
-      parts: [{ text: String(item.text || '').slice(0, 4000) }],
-    }));
+    const systemInstruction = `You are the Gemini Co-Pilot for RAKSHA-BLOCK (TRIKAAL), an Indian Railways engineering-block planning assistant that supports a Section Controller.
 
-    const systemInstruction = `You are the Gemini Co-Pilot for TRIKAAL-RAKSHA-BLOCK, an Indian Railways Section Controller Assistant.
+CURRENT LIVE BOARD CONTEXT (synthetic demo data):
+${buildContextSummary(context, message)}
 
-CURRENT LIVE BOARD CONTEXT:
-  ${buildContextSummary(context, message)}
+How to answer:
+- Be a genuinely helpful expert assistant. Answer the exact question first, in natural language, then add the key evidence and any safety checks.
+- For questions about this board (requisitions, sections, trains, defects, capacity, delays), the context above is the source of truth. Quote real IDs, sections, times and numbers from it.
+- For general Indian Railways knowledge (block working, TSR/speed restrictions, possession, OHE/TRD, S&T, P-Way, interlocking, working timetable concepts, GR/SR), answer from general knowledge, and say when you are giving general guidance rather than board data.
+- Never invent a train, time, risk score, defect, capacity value, or approval status. If the board does not contain it, say so and say what should be checked.
+- Clearly separate facts from recommendations. Recommendations should consider section, date, time window, line type, train movements and each department's protection needs.
+- You may explain and advise, but you never grant authority to occupy a line, clear a train, or approve a block. Final authorization rests with the Section Controller and railway rules.
+- Formatting: plain text for a small chat window. Short paragraphs or "- " bullets. Use **bold** sparingly. No headings, tables or code blocks. Keep answers focused (usually under 180 words) unless the user asks for detail.`;
 
-  Rules for accurate answers:
-  - Treat the live board context as the source of truth for this conversation.
-  - Answer the exact question first, then give the relevant evidence and safety checks.
-  - Never invent a train, time, risk score, defect, capacity value, or approval status. If the context does not contain it, say that it is unavailable and state what must be checked.
-  - Distinguish facts from recommendations. Recommendations must account for section, date, time window, line type, train movement, and department protection requirements.
-  - You may explain a decision, but never grant authority to occupy a line, clear a train, or approve a block. Final authorization remains with the Section Controller and railway rules.
-  - Keep answers concise and use short headings or bullets when they improve clarity.`;
-
-    const configuredModel = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
-    const models = [configuredModel, 'gemini-2.0-flash', 'gemini-1.5-flash']
-      .filter((model, index, all) => all.indexOf(model) === index);
-
+    const contents = buildContents(body.history, message);
+    const models = getModels();
+    const startedAt = Date.now();
+    const TOTAL_BUDGET_MS = 24000;
     let lastFailure = 'Gemini did not return a response.';
 
-    for (const [credentialName, apiKey] of credentials) {
-      for (const model of models) {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 12000);
-        try {
-          const geminiResponse = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
-            {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'x-goog-api-key': apiKey,
-              },
-              signal: controller.signal,
-              body: JSON.stringify({
-                systemInstruction: { parts: [{ text: systemInstruction }] },
-                contents: [...history, { role: 'user', parts: [{ text: message }] }],
-                generationConfig: { temperature: 0.2, maxOutputTokens: 500 },
-              }),
-            }
-          );
-
-          if (!geminiResponse.ok) {
-            const detail = await geminiResponse.text();
-            lastFailure = `${credentialName}/${model} returned HTTP ${geminiResponse.status}: ${detail}`;
-            console.error('[Gemini API Error]:', { credentialName, model, status: geminiResponse.status, detail });
-            continue;
-          }
-
-          const result = (await geminiResponse.json()) as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
-          const reply = result.candidates?.[0]?.content?.parts?.map((part) => part.text || '').join('').trim();
-          if (reply) {
-            sendJson(response, 200, { reply, model });
-            return;
-          }
-          lastFailure = `${credentialName}/${model} returned an empty response.`;
-        } catch (error) {
-          lastFailure = `${credentialName}/${model} request failed or timed out.`;
-          console.error('[Gemini API Error]:', { credentialName, model, error });
-        } finally {
-          clearTimeout(timeoutId);
+    outer:
+    for (const model of models) {
+      for (const withThinking of [true, false]) {
+        const remaining = TOTAL_BUDGET_MS - (Date.now() - startedAt);
+        if (remaining < 3000) break outer;
+        const result = await callGemini(apiKey, model, systemInstruction, contents, withThinking, Math.min(14000, remaining));
+        if (result.ok) {
+          sendJson(response, 200, { reply: result.reply || '', model });
+          return;
         }
+        lastFailure = `${model} -> HTTP ${result.status}: ${result.detail}`;
+        console.error('[Gemini API Error]:', { model, withThinking, status: result.status, detail: result.detail });
+        if (result.fatal) break outer;                 // bad/blocked key: other models will not help
+        if (result.status !== 400) break;              // only retry same model without thinkingConfig on HTTP 400
       }
     }
 
@@ -245,6 +338,7 @@ CURRENT LIVE BOARD CONTEXT:
     sendJson(response, 200, {
       reply: 'I could not parse that request. Ask about a section, train risk, conflict, or a P-Way/S&T/TRD bundling trade-off.',
       degraded: true,
+      degradedReason: String(error),
     });
   }
 }
