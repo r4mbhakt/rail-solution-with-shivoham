@@ -1,0 +1,16 @@
+{
+  "roc_auc": 0.847503,
+  "precision": 0.885246,
+  "recall": 0.947368,
+  "f1": 0.915254,
+  "brier_score": 0.110454,
+  "cross_validation_roc_auc_mean": 0.814575,
+  "cross_validation_roc_auc_std": 0.025981,
+  "logistic_regression_roc_auc": 0.843455,
+  "majority_base_rate_roc_auc": 0.5,
+  "majority_base_rate_brier_score": 0.151224,
+  "lightgbm_beats_logistic": true,
+  "lightgbm_beats_majority": true,
+  "roc_auc_margin_over_logistic": 0.004048,
+  "roc_auc_margin_over_majority": 0.347503
+}
