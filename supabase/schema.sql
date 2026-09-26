@@ -129,31 +129,6 @@ drop policy if exists "notification_dismissals_public_insert" on public.notifica
 create policy "notification_dismissals_public_insert" on public.notification_dismissals
 for insert to public with check (true);
 
-do $$
-begin
-  if not exists (
-    select 1
-    from pg_publication_rel pr
-    join pg_class c on c.oid = pr.prrelid
-    join pg_namespace n on n.oid = c.relnamespace
-    where pr.prpubid = 'supabase_realtime'::regclass
-      and n.nspname = 'public'
-      and c.relname = 'notification_events'
-  ) then
-    alter publication supabase_realtime add table public.notification_events;
-  end if;
-  if not exists (
-    select 1
-    from pg_publication_rel pr
-    join pg_class c on c.oid = pr.prrelid
-    join pg_namespace n on n.oid = c.relnamespace
-    where pr.prpubid = 'supabase_realtime'::regclass
-      and n.nspname = 'public'
-      and c.relname = 'notification_dismissals'
-  ) then
-    alter publication supabase_realtime add table public.notification_dismissals;
-  end if;
-end $$;
 
 grant usage, select on sequence public.section_timetable_id_seq to authenticated;
 grant select on table public.corridor_capacity, public.trains_master,
