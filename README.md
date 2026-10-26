@@ -206,6 +206,5 @@ This is currently a demo-grade deployment, not a production-hardened system:
 ## Links
 
 - Live app: https://raksha-block-trikaal.vercel.app/
-- Vercel project: https://vercel.com/harsh-2111s-projects/raksha_block_trikaal
 
 RAKSHA-BLOCK: coordinated corridor maintenance without the phone tag.
